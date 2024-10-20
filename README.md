@@ -1,2 +1,2 @@
 # CV_Lehren
-Computer_Vision_Lehren
+Learning computer vision
