@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Aruco_Marker_Dinesh.iml" filepath="$PROJECT_DIR$/.idea/Aruco_Marker_Dinesh.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/ArucoMarker.iml" filepath="$PROJECT_DIR$/.idea/ArucoMarker.iml" />
     </modules>
   </component>
 </project>

@@ -48,7 +48,7 @@ def process_image(image_path):
             marker_center = np.mean(pts_dst, axis=0)
 
             # Scale factor to enlarge the poster relative to the marker
-            scale_factor = 3  # Adjust this factor to make the poster larger or smaller
+            scale_factor = 4  # Adjust this factor to make the poster larger or smaller
 
             # Expand the destination points outward
             pts_dst_scaled = []
@@ -66,11 +66,11 @@ def process_image(image_path):
                 [0, poster_height - 1]
             ], dtype=np.float32)
 
-            # Calculate homography matrix with the scaled destination points
-            h_matrix, _ = cv2.findHomography(pts_src, pts_dst_scaled)
+            # Calculate perspective transform matrix
+            perspective_matrix = cv2.getPerspectiveTransform(pts_src, pts_dst_scaled)
 
             # Warp the poster to match the scaled marker's perspective
-            warped_poster = cv2.warpPerspective(poster_img, h_matrix, (image.shape[1], image.shape[0]))
+            warped_poster = cv2.warpPerspective(poster_img, perspective_matrix, (image.shape[1], image.shape[0]))
 
             # Create a mask from the warped poster
             mask = np.zeros_like(image, dtype=np.uint8)
