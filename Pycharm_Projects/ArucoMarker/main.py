@@ -96,19 +96,3 @@ for img_path in images:
         # Save the processed image
         cv2.imwrite(output_path, ar_image)
         print(f"Processed image saved at: {output_path}")
-
-
-# Function to preview images in the default image viewer
-# def open_images_in_photos_app(folder_path):
-#     # Get a list of all image files in the folder
-#     image_files = [f for f in os.listdir(folder_path) if f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]
-#
-#     # Loop through each file and open it in the default image viewer
-#     for image_file in image_files:
-#         img_path = os.path.join(folder_path, image_file)
-#         img = Image.open(img_path)
-#         img.show()  # Open the image in the default image viewer
-
-
-# Preview the processed images
-# open_images_in_photos_app(output_folder)
