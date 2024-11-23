@@ -17,9 +17,17 @@ Welcome to **CV_Lehren**! This repository is dedicated to my journey in masterin
 - **3D Reconstruction**: Techniques for reconstructing 3D models from 2D images.  
 
 ### 3️⃣ Embedded Systems Projects  
-- **Real-Time Object Detection**: Deploying lightweight models on embedded platforms for real-time detection.  
-- **Gesture Recognition**: Developing systems to recognize hand gestures using embedded cameras.  
-- **Autonomous Navigation**: Implementing vision-based navigation for small robots.  
+This repository also includes projects from my master's course **Embedded Systems**, where computer vision techniques were implemented:  
+
+#### **Aruco Marker Detection**  
+- **Description**: This project involves detecting and tracking Aruco markers in real-time. These markers are widely used for pose estimation and augmented reality applications.  
+- **Key Features**:  
+  - Detection and decoding of Aruco markers in video streams.  
+  - Pose estimation for object positioning in 3D space.  
+  - Applications in robotics and AR environments.  
+- **Project Directory**: [Pycharm_Projects/ArucoMarker](https://github.com/DineshPanicker/CV_Lehren/tree/master/Pycharm_Projects/ArucoMarker)  
+
+- **Tools & Technologies**: OpenCV, Python  
 
 ---
 
@@ -35,6 +43,7 @@ Welcome to **CV_Lehren**! This repository is dedicated to my journey in masterin
 - **Computer Vision.ipynb**: A comprehensive notebook covering various computer vision techniques and their implementations.  
 - **Grayscale.ipynb**: An exploration of image processing methods, focusing on grayscale transformations.  
 - **Rough Work.ipynb**: A collection of experimental code snippets and notes from ongoing projects.  
+- **Aruco Marker Detection**: A master's project focusing on real-time marker detection and tracking.  
 
 ---
 
