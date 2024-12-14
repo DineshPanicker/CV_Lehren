@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import cv2
-from PIL import Image
+from cv2 import aruco
+
 # Define paths
 dataset_folder = "A:\\RWU\\First Sem\\CV\\Room with ArUco Markers-20241024"  # Replace with your dataset path
 poster_path = "A:\\RWU\\First Sem\\CV\\Poster\\Switzerland-new.jpg"  # Replace with your poster image path
@@ -11,7 +12,7 @@ output_folder = "A:\\RWU\\First Sem\\CV\\Output folder"  # Define output folder 
 os.makedirs(output_folder, exist_ok=True)
 
 # Load ArUco dictionary and detection parameters
-aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
+aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 parameters = cv2.aruco.DetectorParameters()
 
 # Load the poster image
@@ -23,7 +24,7 @@ if poster_img is None:
 # Get the original dimensions of the poster image
 poster_height, poster_width = poster_img.shape[:2]
 
-# Function to detect ArUco markers and overlay the scaled poster
+# Function to detect ArUco markers and overlay the poster
 def process_image(image_path):
     # Read and convert the image to grayscale
     image = cv2.imread(image_path)
@@ -40,44 +41,43 @@ def process_image(image_path):
     if ids is not None:
         print(f"Detected marker IDs: {ids.flatten()}")
 
-        # Overlay the poster on each detected marker
-        for corner in corners:
-            pts_dst = corner[0].astype(np.float32)  # Corner points of the detected marker
+        # Process each detected marker
+        for marker_corners in corners:
+            marker_corners = marker_corners[0].astype(np.float32)
 
             # Calculate the center of the marker
-            marker_center = np.mean(pts_dst, axis=0)
+            marker_center = np.mean(marker_corners, axis=0)
 
-            # Scale factor to enlarge the poster relative to the marker
-            scale_factor = 3.5  # Adjust this factor to make the poster larger or smaller
+            # Define poster corners relative to the poster's dimensions
+            w, h = poster_width / 6, poster_height / 6  # Scale factors for resizing
+            corner1 = (poster_width / 2 - w / 2, poster_height / 2 - h / 2)
+            corner2 = (poster_width / 2 + w / 2, poster_height / 2 - h / 2)
+            corner3 = (poster_width / 2 + w / 2, poster_height / 2 + h / 2)
+            corner4 = (poster_width / 2 - w / 2, poster_height / 2 + h / 2)
 
-            # Expand the destination points outward
-            pts_dst_scaled = []
-            for point in pts_dst:
-                # Move the point outward from the center by the scale factor
-                scaled_point = marker_center + scale_factor * (point - marker_center)
-                pts_dst_scaled.append(scaled_point)
-            pts_dst_scaled = np.array(pts_dst_scaled, dtype=np.float32)
+            # Define input and output points for perspective transform
+            input_corners = np.float32([corner1, corner2, corner3, corner4])
+            output_corners = np.float32([marker_corners[0], marker_corners[1], marker_corners[2], marker_corners[3]])
 
-            # Define source points from the original poster image
-            pts_src = np.array([
-                [0, 0],
-                [poster_width - 1, 0],
-                [poster_width - 1, poster_height - 1],
-                [0, poster_height - 1]
-            ], dtype=np.float32)
+            # Calculate the perspective transform matrix
+            M = cv2.getPerspectiveTransform(input_corners, output_corners)
 
-            # Calculate perspective transform matrix
-            perspective_matrix = cv2.getPerspectiveTransform(pts_src, pts_dst_scaled)
-
-            # Warp the poster to match the scaled marker's perspective
-            warped_poster = cv2.warpPerspective(poster_img, perspective_matrix, (image.shape[1], image.shape[0]))
+            # Warp the poster to fit the marker's perspective
+            transformed_poster = cv2.warpPerspective(poster_img, M, (image.shape[1], image.shape[0]))
 
             # Create a mask from the warped poster
+            pts = np.array(output_corners, np.int32)  # Convert output corners to integer
             mask = np.zeros_like(image, dtype=np.uint8)
-            cv2.fillConvexPoly(mask, np.int32(pts_dst_scaled), (255, 255, 255))
+            cv2.fillPoly(mask, [pts], (255, 255, 255))
 
-            # Use the mask to overlay the poster onto the original image
-            image = cv2.bitwise_and(image, 255 - mask) + cv2.bitwise_and(warped_poster, mask)
+            # Invert the mask to isolate the area outside the polygon
+            mask_inverted = cv2.bitwise_not(mask)
+
+            # Apply the mask to the original image
+            image = cv2.bitwise_and(image, mask_inverted)
+
+            # Overlay the transformed poster onto the original image
+            image = cv2.bitwise_or(image, transformed_poster)
 
         return image
     else:
@@ -88,11 +88,11 @@ def process_image(image_path):
 # Process each image in the dataset
 images = [os.path.join(dataset_folder, img) for img in os.listdir(dataset_folder) if img.endswith('.jpg')]
 for img_path in images:
-    ar_image = process_image(img_path)
-    if ar_image is not None:
+    processed_image = process_image(img_path)
+    if processed_image is not None:
         # Define the output path for the processed image
         output_path = os.path.join(output_folder, os.path.basename(img_path))
 
         # Save the processed image
-        cv2.imwrite(output_path, ar_image)
+        cv2.imwrite(output_path, processed_image)
         print(f"Processed image saved at: {output_path}")
