@@ -4,9 +4,9 @@ import cv2
 from cv2 import aruco
 
 # Define paths
-dataset_folder = "A:\\RWU\\First Sem\\CV\\Room with ArUco Markers-20241024"  # Replace with your dataset path
-poster_path = "A:\\RWU\\First Sem\\CV\\Poster\\Switzerland-new.jpg"  # Replace with your poster image path
-output_folder = "A:\\RWU\\First Sem\\CV\\Output folder"  # Define output folder path
+dataset_folder = '/home/dinesh/Room with ArUco Markers-20241024'  # Replace with your dataset path
+poster_path = '/home/dinesh/Poster/Switzerland-new.jpg'  # Replace with your poster image path
+output_folder = '/home/dinesh/Output Folder'  # Define output folder path
 
 # Create output folder if it doesn't exist
 os.makedirs(output_folder, exist_ok=True)
