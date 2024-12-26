@@ -7,6 +7,14 @@ from ultralytics import YOLO
 CALIB_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/calib'
 IMAGES_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/images'
 LABELS_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/labels'
+OUTPUT_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/output' 
+
+# Ensure the output directory exists
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
+    print(f"Output directory created: {OUTPUT_DIR}")
+else:
+    print(f"Output directory already exists: {OUTPUT_DIR}")
 
 # Initialize YOLO object detection model
 model = YOLO(r'/home/dinesh/CV_Lehren/task_2_CV/yolo11n.pt')  # Replace "yolov11" with the appropriate model path if needed
@@ -59,7 +67,7 @@ def calculate_iou(box1, box2):
     return inter_area / union_area if union_area > 0 else 0
 
 
-def calculate_metrics(gt_boxes, pred_boxes, iou_threshold=0.5):
+def calculate_metrics(gt_boxes, pred_boxes, iou_threshold=0.90):
     """
     Calculate precision, recall, and IoU metrics for a single image.
     """
@@ -99,7 +107,7 @@ def estimate_depth(bbox, intrinsic_matrix, camera_height=1.65):
 def process_image(image_file, calib_file, label_file):
     """
     Process a single image: detect objects, calculate IoU, and estimate depth.
-    Display results with bounding boxes using OpenCV without saving images.
+    Save processed images with bounding box annotations to the output folder.
     """
     # Extract image name
     image_name = os.path.basename(image_file)
@@ -113,11 +121,11 @@ def process_image(image_file, calib_file, label_file):
     gt_boxes = load_groundtruth_labels(label_file)
 
     # Detect objects using YOLO
-    results = model.predict(image,conf=0.3)
+    results = model.predict(image, conf=0.3)
 
     # Extract bounding boxes and classes
     pred_boxes = []
-    for box in results[0].boxes:
+    for box in results[0].boxes:  # Access boxes from the first result
         cls = int(box.cls.cpu().numpy()[0])  # Class index
         conf = float(box.conf.cpu().numpy()[0])  # Confidence score
         bbox = box.xyxy.cpu().numpy()[0]  # Bounding box in (xmin, ymin, xmax, ymax) format
@@ -141,34 +149,13 @@ def process_image(image_file, calib_file, label_file):
         label = f"GT: {gt['distance']:.2f}m"
         cv2.putText(image, label, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    # Match predicted boxes with ground truth
-    results = []
-    for pred, conf in pred_boxes:
-        best_iou = 0
-        matched_gt = None
-        for gt in gt_boxes:
-            iou = calculate_iou(pred, gt["bbox"])
-            if iou > best_iou:
-                best_iou = iou
-                matched_gt = gt
+    # Save the annotated image to the output directory
+    output_file = os.path.join(OUTPUT_DIR, image_name)
+    cv2.imwrite(output_file, image)
+    print(f"Saved annotated image to: {output_file}")
 
-        depth_estimate = estimate_depth(pred, intrinsic_matrix)
-        print(f"  Matched Ground Truth BB: {matched_gt['bbox'] if matched_gt else 'None'}, IoU: {best_iou:.2f}, "
-              f"Estimated Depth: {depth_estimate:.2f}m")
-        results.append({
-            "pred_box": pred,
-            "confidence": conf,
-            "best_iou": best_iou,
-            "matched_gt": matched_gt,
-            "depth_estimate": depth_estimate
-        })
+    return pred_boxes  # Return predictions for further evaluation
 
-    # Show the image with annotations
-    cv2.imshow("Detections", image)
-    cv2.waitKey(0)  # Press any key to close the image window
-    cv2.destroyAllWindows()
-
-    return results
 
 def main():
     total_tp, total_fp, total_fn = 0, 0, 0
@@ -186,35 +173,25 @@ def main():
         calib_file = os.path.join(CALIB_DIR, os.path.splitext(image_name)[0] + ".txt")
 
         # Process image
-        results = process_image(image_file, calib_file, label_file)
+        pred_boxes = process_image(image_file, calib_file, label_file)
 
-        # Extract predictions and ground truth
-        pred_boxes = [res["pred_box"] for res in results]
+        # Extract ground truth
         gt_boxes = load_groundtruth_labels(label_file)
 
         # Calculate metrics
-        precision, recall, tp, fp, fn = calculate_metrics(gt_boxes, pred_boxes)
+        precision, recall, tp, fp, fn = calculate_metrics(gt_boxes, [box[0] for box in pred_boxes])
         all_precisions.append(precision)
         all_recalls.append(recall)
         total_tp += tp
         total_fp += fp
         total_fn += fn
 
-        # Calculate depth errors
-        for res in results:
-            if res["matched_gt"]:
-                gt_distance = res["matched_gt"]["distance"]
-                estimated_distance = res["depth_estimate"]
-                depth_errors.append(abs(gt_distance - estimated_distance))
-
     # Overall metrics
-    mean_precision = sum(all_precisions) / len(all_precisions)
-    mean_recall = sum(all_recalls) / len(all_recalls)
-    avg_depth_error = sum(depth_errors) / len(depth_errors)
+    mean_precision = sum(all_precisions) / len(all_precisions) if all_precisions else 0
+    mean_recall = sum(all_recalls) / len(all_recalls) if all_recalls else 0
 
     print(f"Overall Precision: {mean_precision:.2f}")
     print(f"Overall Recall: {mean_recall:.2f}")
-    print(f"Average Depth Estimation Error: {avg_depth_error:.2f} meters")
 
 
 if __name__ == "__main__":
