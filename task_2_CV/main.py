@@ -7,7 +7,7 @@ from ultralytics import YOLO
 CALIB_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/calib'
 IMAGES_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/images'
 LABELS_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/labels'
-OUTPUT_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/output' 
+OUTPUT_DIR = '/home/dinesh/KITTI_Selection/KITTI_Selection/output'
 
 # Ensure the output directory exists
 if not os.path.exists(OUTPUT_DIR):
@@ -17,8 +17,7 @@ else:
     print(f"Output directory already exists: {OUTPUT_DIR}")
 
 # Initialize YOLO object detection model
-model = YOLO(r'/home/dinesh/CV_Lehren/task_2_CV/yolo11n.pt')  # Replace "yolov11" with the appropriate model path if needed
-
+model = YOLO('/home/dinesh/CV_Lehren/task_2_CV/yolo11x.pt')
 
 def load_intrinsic_matrix(calib_file):
     """
@@ -28,7 +27,6 @@ def load_intrinsic_matrix(calib_file):
         lines = f.readlines()
         matrix = [list(map(float, line.strip().split())) for line in lines]
     return np.array(matrix)
-
 
 def load_groundtruth_labels(label_file):
     """
@@ -45,7 +43,6 @@ def load_groundtruth_labels(label_file):
                 "distance": float(gt_distance)
             })
     return gt_boxes
-
 
 def calculate_iou(box1, box2):
     """
@@ -66,8 +63,7 @@ def calculate_iou(box1, box2):
     union_area = area_box1 + area_box2 - inter_area
     return inter_area / union_area if union_area > 0 else 0
 
-
-def calculate_metrics(gt_boxes, pred_boxes, iou_threshold=0.90):
+def calculate_metrics(gt_boxes, pred_boxes, iou_threshold=0.75):
     """
     Calculate precision, recall, and IoU metrics for a single image.
     """
@@ -76,14 +72,16 @@ def calculate_metrics(gt_boxes, pred_boxes, iou_threshold=0.90):
 
     for pred in pred_boxes:
         best_iou = 0
+        best_match = None
         for idx, gt in enumerate(gt_boxes):
             iou = calculate_iou(pred, gt["bbox"])
             if iou > best_iou:
                 best_iou = iou
+                best_match = idx
 
         if best_iou >= iou_threshold:
             tp += 1
-            matched_gt.add(idx)
+            matched_gt.add(best_match)
         else:
             fp += 1
 
@@ -92,107 +90,92 @@ def calculate_metrics(gt_boxes, pred_boxes, iou_threshold=0.90):
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     return precision, recall, tp, fp, fn
 
-
-def estimate_depth(bbox, intrinsic_matrix, camera_height=1.65):
+def estimate_depth(bbox, intrinsic_matrix, plane_height=1.65):
     """
-    Estimate the depth of an object using the intrinsic camera matrix and bounding box coordinates.
+    Estimate the depth of an object using the intrinsic matrix and ground plane intersection.
     """
-    x, y, w, h = bbox
-    midpoint = np.array([x + w / 2, y + h, 1])
-    world_coords = np.linalg.inv(intrinsic_matrix).dot(midpoint)
-    depth = camera_height / world_coords[1]
-    return depth
-
+    x = (bbox[0] + bbox[2]) / 2  # Bottom-center x
+    y = bbox[3]  # Bottom-center y
+    point = np.array([x, y, 1])  # Homogeneous coordinates
+    ray = np.linalg.inv(intrinsic_matrix) @ point
+    t = plane_height / ray[1]  # Intersection with ground plane
+    point_3d = t * ray
+    distance = np.linalg.norm(point_3d)
+    return distance
 
 def process_image(image_file, calib_file, label_file):
     """
     Process a single image: detect objects, calculate IoU, and estimate depth.
-    Save processed images with bounding box annotations to the output folder.
+    Visualize predictions (red) and ground truth (green).
+    Calculate precision and recall for the image.
     """
-    # Extract image name
-    image_name = os.path.basename(image_file)
-    print(f"\nProcessing Image: {image_name}")
-
-    # Load image and intrinsic matrix
+    # Load image
     image = cv2.imread(image_file)
     intrinsic_matrix = load_intrinsic_matrix(calib_file)
-
-    # Load ground truth labels
     gt_boxes = load_groundtruth_labels(label_file)
 
-    # Detect objects using YOLO
-    results = model.predict(image, conf=0.3)
-
-    # Extract bounding boxes and classes
+    # Detect objects using YOLOv11n
+    results = model.predict(image, conf=0.25)
     pred_boxes = []
-    for box in results[0].boxes:  # Access boxes from the first result
+
+    for box in results[0].boxes:
         cls = int(box.cls.cpu().numpy()[0])  # Class index
         conf = float(box.conf.cpu().numpy()[0])  # Confidence score
         bbox = box.xyxy.cpu().numpy()[0]  # Bounding box in (xmin, ymin, xmax, ymax) format
-
         if cls == 2:  # Assuming 'car' class index is 2
             pred_boxes.append((bbox, conf))
-            print(f"  Predicted BB: {bbox}, Confidence: {conf:.2f}")
-
-            # Draw YOLO predicted bounding box in RED
             x_min, y_min, x_max, y_max = map(int, bbox)
-            cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)  # Red color
-            label = f"Pred: {conf:.2f}"
-            cv2.putText(image, label, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)  # Red box
+            depth = estimate_depth(bbox, intrinsic_matrix)
+            cv2.putText(image, f"{depth:.2f}m", (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-    # Draw ground truth bounding boxes in GREEN
-    print("  Ground Truth BBs:")
+    # Draw ground truth boxes in green
     for gt in gt_boxes:
         x_min, y_min, x_max, y_max = map(int, gt["bbox"])
-        print(f"    BB: {gt['bbox']}, Distance: {gt['distance']:.2f}m")
-        cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)  # Green color
-        label = f"GT: {gt['distance']:.2f}m"
-        cv2.putText(image, label, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)  # Green box
+        cv2.putText(image, f"{gt['distance']:.2f}m", (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    # Save the annotated image to the output directory
-    output_file = os.path.join(OUTPUT_DIR, image_name)
+    # Calculate precision and recall
+    precision, recall, tp, fp, fn = calculate_metrics(gt_boxes, [box[0] for box in pred_boxes])
+
+    # Annotate precision and recall on the image (in black)
+    summary_text = f"Precision: {precision:.2f}, Recall: {recall:.2f}"
+    cv2.putText(image, summary_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+
+    # Save the annotated image
+    output_file = os.path.join(OUTPUT_DIR, os.path.basename(image_file))
     cv2.imwrite(output_file, image)
+    print(f"Image: {os.path.basename(image_file)} | Precision: {precision:.2f}, Recall: {recall:.2f}")
     print(f"Saved annotated image to: {output_file}")
 
-    return pred_boxes  # Return predictions for further evaluation
-
+    return precision, recall
 
 def main():
     total_tp, total_fp, total_fn = 0, 0, 0
     all_precisions = []
     all_recalls = []
-    depth_errors = []
 
     for image_name in os.listdir(IMAGES_DIR):
         if not image_name.endswith(".png"):
             continue
 
-        # Derive file paths
+        # Paths
         image_file = os.path.join(IMAGES_DIR, image_name)
         label_file = os.path.join(LABELS_DIR, os.path.splitext(image_name)[0] + ".txt")
         calib_file = os.path.join(CALIB_DIR, os.path.splitext(image_name)[0] + ".txt")
 
         # Process image
-        pred_boxes = process_image(image_file, calib_file, label_file)
+        precision, recall = process_image(image_file, calib_file, label_file)
 
-        # Extract ground truth
-        gt_boxes = load_groundtruth_labels(label_file)
-
-        # Calculate metrics
-        precision, recall, tp, fp, fn = calculate_metrics(gt_boxes, [box[0] for box in pred_boxes])
+        # Log metrics
         all_precisions.append(precision)
         all_recalls.append(recall)
-        total_tp += tp
-        total_fp += fp
-        total_fn += fn
 
-    # Overall metrics
+    # Calculate and log overall metrics
     mean_precision = sum(all_precisions) / len(all_precisions) if all_precisions else 0
     mean_recall = sum(all_recalls) / len(all_recalls) if all_recalls else 0
-
-    print(f"Overall Precision: {mean_precision:.2f}")
+    print(f"\nOverall Precision: {mean_precision:.2f}")
     print(f"Overall Recall: {mean_recall:.2f}")
-
 
 if __name__ == "__main__":
     main()
